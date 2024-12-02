@@ -41,37 +41,14 @@ mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=5, min_detection_confidence=0.3)
 mp_drawing = mp.solutions.drawing_utils
 
-# Shared resources
 camera = cv2.VideoCapture(0)
-camera_lock = threading.Lock()
-frame = None
-frame_condition = threading.Condition()  
+# camera.set(cv2.CAP_PROP_FPS, 30)
 face_mesh_frame = None
-filter_face_frame = None
-cat_ears_img = cv2.imread('static/image/CatEar.png', cv2.IMREAD_UNCHANGED)
-cat_mask_img = cv2.imread('static/image/CatMask.png', cv2.IMREAD_UNCHANGED)
-# Create a threading event to synchronize camera frame processing
-frame_event = threading.Event()
 
-def initialize_camera():
-    global camera
-    with camera_lock:
-        if camera is None or not camera.isOpened():
-            camera = cv2.VideoCapture(0)
-            camera.set(cv2.CAP_PROP_FPS, 30)  
-        if not camera.isOpened():
-            print("Failed to initialize camera.")
-            return False
-    return True
-
-def release_camera():
-    global camera
-    with camera_lock:
-        if camera is not None and camera.isOpened():
-            camera.release()
-            camera = None
 
 # filter one
+cat_ears_img = cv2.imread('static/image/CatEar.png', cv2.IMREAD_UNCHANGED)
+cat_mask_img = cv2.imread('static/image/CatMask.png', cv2.IMREAD_UNCHANGED)
 def overlay_cat_ears(frame, landmarks, left_ear_idx, right_ear_idx):
     h, w, _ = frame.shape
     left_ear = landmarks[left_ear_idx]
@@ -385,87 +362,47 @@ def overlay_cowboy_hat(frame, landmarks, upper_head_idx):
             alpha_hat * resized_hat[:, :, c] +
             alpha_frame * frame[y1:y2, x1:x2, c]
         )
-
-def capture_frames():
-    """Continuously capture frames from the camera."""
-    global frame
-    while camera.isOpened():
-        ret, captured_frame = camera.read()
+choice = 0
+def generate_filter_face_frames():
+    global choice
+    while True:
+        ret, frame = camera.read()
         if not ret:
             break
-        captured_frame = cv2.resize(captured_frame, (640, 480))
-        
-        with frame_condition:
-            frame = captured_frame
-            frame_condition.notify_all()  # Notify all waiting threads
-        time.sleep(0.03)  # Limit frame rate to ~30 FPS
+        frame = cv2.resize(frame, (640, 480))
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(rgb_frame)
 
-def get_frame():
-    """Function for threads to get the latest frame."""
-    global frame
-    with frame_condition:
-        frame_condition.wait()  # Wait for a new frame
-        return frame.copy()  # Return a copy to avoid race conditions
+        # Proses deteksi wajah
+        if results.multi_face_landmarks:
+            overlay_frame = frame.copy()
 
-def apply_filters(frame, choice=1):
-    """Apply specific filters based on the user's choice."""
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(rgb_frame)
+            # Loop untuk setiap wajah yang terdeteksi
+            for face_landmarks in results.multi_face_landmarks:
+                # mp_drawing.draw_landmarks(overlay_frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS)
+                landmarks = face_landmarks.landmark
 
-    if results.multi_face_landmarks:
-        face_mesh_only_frame = frame.copy()
-        overlay_frame = frame.copy()
-        
-        for face_landmarks in results.multi_face_landmarks:
-            landmarks = face_landmarks.landmark
-            
-            if choice == 1:
-                overlay_cat_ears(overlay_frame, landmarks, 454, 234)
-                overlay_cat_mask(overlay_frame, landmarks, 5, 152)
-            elif choice == 2:
-                overlay_dog_ears(overlay_frame, landmarks, 454, 234)
-                overlay_dog_mask(overlay_frame, landmarks, 5, 152)
-            elif choice == 3:
-                overlay_glasses(overlay_frame, landmarks, 33, 263)
-                overlay_mustache(overlay_frame, landmarks, 61, 291, 11)
-                overlay_cowboy_hat(overlay_frame, landmarks, 10)
-        
-        return face_mesh_only_frame, overlay_frame
+                # Terapkan filter sesuai pilihan
+                if choice == 0:
+                    pass
+                elif choice == 1:
+                    overlay_cat_ears(overlay_frame, landmarks, 454, 234)  
+                    overlay_cat_mask(overlay_frame, landmarks, 5, 152)   
+                elif choice == 2:
+                    overlay_dog_ears(overlay_frame, landmarks, 454, 234)  
+                    overlay_dog_mask(overlay_frame, landmarks, 5, 152)  
+                elif choice == 3:
+                    overlay_glasses(overlay_frame, landmarks, 33, 263)
+                    overlay_mustache(overlay_frame, landmarks, 61, 291, 11)
+                    overlay_cowboy_hat(overlay_frame, landmarks, 10)
 
-    return frame, frame
-
-@app.route('/face_mesh_feed')
-def face_mesh_feed():
-    return Response(generate_face_mesh_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-def generate_face_mesh_frames():
-    while True:
-        raw_frame = get_frame()
-        if raw_frame is None:
-            continue
-        face_mesh_frame, _ = apply_filters(raw_frame)
-        _, buffer = cv2.imencode('.jpg', face_mesh_frame)
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+        _, buffer = cv2.imencode('.jpg', overlay_frame)
+        frame = buffer.tobytes()
+        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 @app.route('/filter_face_feed')
 def filter_face_feed():
     return Response(generate_filter_face_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-def generate_filter_face_frames():
-    while True:
-        raw_frame = get_frame()
-        if raw_frame is None:
-            continue
-        _, filter_frame = apply_filters(raw_frame)
-        _, buffer = cv2.imencode('.jpg', filter_frame)
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-
-threading.Thread(target=capture_frames, daemon=True).start()
-.gi
-@app.route('/shutdown')
-def shutdown():
-    release_camera()
-    return "Camera shutdown"
 
 @app.route("/filterdetail/<int:id>")
 def filterdetailpage(id):
