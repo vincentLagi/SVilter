@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='RegisterPageStyle.css') }}">
+    <title>Register Page</title>
+</head>
+
+<body id="body">
+    <nav id="navbar">
+        <h1 id="navbar-logo">SVilter</h1>
+        <a id="navbar-signup" href="/login">Log In</a>
+    </nav>
+
+    <div id="main-container">
+        <div id="main-content">
+            <img id="main-image" src="{{ url_for('static', filename='image/RegisterImage.png') }}" alt="">
+
+            <div id="main-parttwo">
+                <form style="width: 80%;height: 80%;" action="" method="post" id="register-form">
+                    <div id="main-parttwo-content-r">
+                        <h1 id="main-title">Register to Filtert</h1>
+                        <input id="main-username-input" type="text" name="Username" placeholder="Insert Your Username">
+
+                        <input id="main-password-input" type="password" name="Password"
+                            placeholder="Insert Your Password">
+
+                        <input id="main-cpassword-input" type="password" name="ConfirmPassword"
+                            placeholder="Insert Your Confirm Password">
+
+                        <button id="main-submit-button" type="submit">Submit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="popup-modal-e" class="modal">
+        <div class="modal-content">
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
+            {% for message in messages %}
+            {{ message }}
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+            <button id="close-popup-e">Close</button>
+        </div>
+    </div>
+
+    <div id="registration-status" data-success="{{ session.pop('registration_successful', 'false') }}"></div>
+    <div id="error" data-success="{{ 'true' if get_flashed_messages() else 'false' }}"></div>
+
+    <script>
+        var registrationSuccessful = document.getElementById('registration-status').getAttribute('data-success') === 'True';
+        var hasErrors = document.getElementById('error').getAttribute('data-success') === 'true';
+        console.log(hasErrors);
+
+        function showPopup() {
+            document.getElementById('popup-modal').style.display = 'flex';
+        }
+        function showErrorPopup() {
+            document.getElementById('popup-modal-e').style.display = 'flex';
+        }
+        function closePopup() {
+            document.getElementById('popup-modal').style.display = 'none';
+        }
+        function closeErrorPopup() {
+            document.getElementById('popup-modal-e').style.display = 'none';
+        }
+
+        if (registrationSuccessful) {
+            showPopup();
+        } else if (hasErrors) {
+            showErrorPopup();
+        }
+
+        document.getElementById('close-popup-e').addEventListener('click', closeErrorPopup);
+
+        var closePopupButton = document.getElementById('close-popup');
+        if (closePopupButton) {
+            closePopupButton.addEventListener('click', closePopup);
+        }
+    </script>
+
+
+</body>
+
+</html>

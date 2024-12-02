@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='GamePageStyle.css')}}">
+    <title>Fruit Ninja Game</title>
+</head>
+
+<body id="body">
+    <div id="main">
+        <img src="{{ url_for('game_video_feed') }}" alt="Video Feed" id="gameImage">
+    </div>
+</body>
+<script>
+    const sse = new EventSource('/sse_game_status');
+
+        sse.onmessage = function (event) {
+            console.log("Status:", event.data);
+            if (event.data === "redirect") {
+                sse.close(); 
+                window.location.href = "/home"; 
+            }
+        };
+
+        sse.onerror = function () {
+            console.error("SSE connection failed");
+            sse.close(); // Close SSE connection on error
+        };
+    
+        const imgElement = document.getElementById('gameImage');
+        const imgWidth = imgElement.width;   
+        const imgHeight = imgElement.height; 
+
+        fetch('/update_frame_size', {
+            method: 'POST',
+            body: JSON.stringify({ width: imgWidth, height: imgHeight }),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+</script>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='HomePageStyle.css')}}">
+    <title>Home Page</title>
+</head>
+<body id="body">
+    <nav id="navbar">
+        <h1 id="navbar-logo"  onclick="window.location.href='/home'">SVilter</h1>
+        <a id="navbar-signup" href="/profile">{{session['username']}}</a>
+    </nav>
+
+    <div id="main-container">
+        <div id="main-content">
+            <div id="main-part-one" onclick="window.location.href='/filter'">
+                <img id="main-img" src="{{ url_for('static', filename='image/Filter.jpg')}}" alt="">
+                <h1 id="main-text">Filter</h1>
+            </div>
+
+            <div id="main-part-two" onclick="window.location.href='/game'">
+                <img id="main-img" src="{{ url_for('static', filename='image/Game.jpg')}}" alt="">
+                <h1 id="main-text">Game</h1>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='LoginPageStyle.css')}}">
+    <title>Login Page</title>
+</head>
+
+<body id="body">
+    <nav id="navbar">
+        <h1 id="navbar-logo">SVilter</h1>
+        <a id="navbar-signup" href="/register">Sign Up</a>
+    </nav>
+
+    <div id="main-container">
+        <div id="main-content">
+
+            <img id="main-image" src="{{ url_for('static', filename='image/LoginImage.png')}}" alt="">
+
+            <div id="main-parttwo">
+
+                <div id="main-parttwo-content">
+                    <form action="" method="post"
+                        style="width: 100%; height: 75%; display: flex;justify-content: center;align-items: center;flex-direction: column;margin: 0;">
+
+                        <h1 id="main-title">Login to Filtert</h1>
+
+                        <input id="main-username-input" type="text" name="username" placeholder="Insert Your Username">
+
+                        <input id="main-password-input" type="password" name="password"
+                            placeholder="Insert Your Password">
+
+                        <button id="main-submit-button">Submit</button>
+
+                    </form>
+
+                    <p id="main-OR">OR</p>
+
+                    <form action="" method="post"
+                        style="width: 100%; height: 25%;display: flex;justify-content: center;">
+                        <img id="main-faceIcon" src="{{ url_for('static', filename='image/faceRecog.png')}}" alt=""
+                            onclick=openModal()>
+                    </form>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="popup-modal-e" class="modal">
+        <div class="modal-content">
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
+            {% for message in messages %}
+            {{ message }}
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+            <button id="close-popup-e">Close</button>
+        </div>
+    </div>
+    <div id="imageModal" class="modal-reg">
+        <div class="modal-content-reg">
+            <div class="modal-header">
+                <p >Login With Face</p>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <p class="modal-content-reg-p"></p>
+            <div class="modal-body">
+                <div class="image-container">
+                    <h2 >Smile and place your face in the middle</h2>
+                    <img src="{{ url_for('login_face_video_feed') }}" width="100%" height="400px" id="face_video_feed">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="registration-status" data-success="{{ session.pop('registration_successful', 'false') }}"></div>
+    <div id="error" data-success="{{ 'true' if get_flashed_messages() else 'false' }}"></div>
+    <script>
+        closeModal()
+        const sse = new EventSource('/sse_status');
+
+            sse.onmessage = function (event) {
+                console.log("Status:", event.data);
+                if (event.data === "redirect") {
+                    sse.close(); 
+                    window.location.href = "/login"; 
+                }
+            };
+
+            sse.onerror = function () {
+                console.error("SSE connection failed");
+                sse.close(); // Close SSE connection on error
+            };
+
+
+         
+
+        
+
+
+        function openModal() {
+            document.getElementById("imageModal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("imageModal").style.display = "none";
+        }
+
+        window.onclick = function (event) {
+            var modal = document.getElementById("imageModal");
+            if (event.target === modal) {
+                closeModal();
+            }
+        };
+        var registrationSuccessful = document.getElementById('registration-status').getAttribute('data-success') === 'True';
+        var hasErrors = document.getElementById('error').getAttribute('data-success') === 'true';
+        console.log(hasErrors);
+
+        function showPopup() {
+            document.getElementById('popup-modal').style.display = 'flex';
+        }
+        function showErrorPopup() {
+            document.getElementById('popup-modal-e').style.display = 'flex';
+        }
+        function closePopup() {
+            document.getElementById('popup-modal').style.display = 'none';
+        }
+        function closeErrorPopup() {
+            document.getElementById('popup-modal-e').style.display = 'none';
+        }
+
+        if (registrationSuccessful) {
+            showPopup();
+        } else if (hasErrors) {
+            showErrorPopup();
+        }
+
+        document.getElementById('close-popup-e').addEventListener('click', closeErrorPopup);
+
+        var closePopupButton = document.getElementById('close-popup');
+        if (closePopupButton) {
+            closePopupButton.addEventListener('click', closePopup);
+        }
+  
+
+    </script>
+</body>
+
+</html>
