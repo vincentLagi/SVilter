@@ -1,8 +1,8 @@
 #body {
   margin: 0;
   padding: 0;
-  width: 100vw; /* Use full width of the viewport */
-  height: 100vh; /* Use full height of the viewport */
+  width: 100vw; 
+  height: 100vh; 
   display: flex;
   flex-direction: column;
 }
@@ -16,15 +16,15 @@
 #main {
   width: 100%;
   height: 100%;
-  display: flex; /* Centering child content */
-  justify-content: center; /* Center horizontally */
-  align-items: center; /* Center vertically */
-  overflow: hidden; /* Prevent overflow if the image becomes too large */
+  display: flex; 
+  justify-content: center;
+  align-items: center; 
+  overflow: hidden; 
 }
 
 img {
-  width: 100%; /* Scale the image horizontally */
-  height: 100%; /* Scale the image vertically */
-  object-fit: fill; /* Ensure the image fits inside the container without cropping */
-  display: block; /* Remove any space below the image */
+  width: 100%; 
+  height: 100%; 
+  object-fit: fill;  
+  display: block; 
 }

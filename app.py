@@ -2,7 +2,7 @@ import os
 import random
 import cv2.data
 from django import conf
-from flask import Flask, Response, flash, jsonify, redirect, session, url_for, render_template, request
+from flask import Flask, Response, flash, jsonify, redirect, send_file, session, url_for, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 import cv2
 from matplotlib import use
@@ -18,6 +18,7 @@ from sqlalchemy import exists, false, null
 import seaborn as sns
 import tensorflow as tf
 import dlib
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'VL24-1'
@@ -53,92 +54,120 @@ def overlay_cat_ears(frame, landmarks, left_ear_idx, right_ear_idx):
     h, w, _ = frame.shape
     left_ear = landmarks[left_ear_idx]
     right_ear = landmarks[right_ear_idx]
-    
+
     # Calculate ear coordinates
     left_x, left_y = int(left_ear.x * w), int(left_ear.y * h)
     right_x, right_y = int(right_ear.x * w), int(right_ear.y * h)
-    
+
     # Center and angle calculations
     center_x, center_y = (left_x + right_x) // 2, (left_y + right_y) // 2
     angle = -math.degrees(math.atan2(right_y - left_y, right_x - left_x))
-    
+
     # Set ear dimensions based on distance
     ear_width = int(np.linalg.norm([right_x - left_x, right_y - left_y]) * 1.4)
     ear_height = int(ear_width * cat_ears_img.shape[0] / cat_ears_img.shape[1])
-    
-    # Check if overlay dimensions fit within frame boundaries
+
+    # Overlay position
     top_left_x = center_x - ear_width // 2
     top_left_y = center_y - ear_height - 30  # Adjust position above the head
-    
-    # If overlay is outside the frame bounds, skip overlaying
-    if top_left_x < 0 or top_left_y < 0 or (top_left_x + ear_width) > w or (top_left_y + ear_height) > h:
-        return  # Skip overlay if it goes out of bounds
-    
+
+    # Compute overlay cropping boundaries
+    overlay_start_x = max(0, -top_left_x)
+    overlay_start_y = max(0, -top_left_y)
+    overlay_end_x = min(ear_width, w - top_left_x)
+    overlay_end_y = min(ear_height, h - top_left_y)
+
+    # Check for valid overlay dimensions
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # Skip overlay if out of bounds
+
+    # Adjust frame boundaries
+    frame_start_x = max(0, top_left_x)
+    frame_start_y = max(0, top_left_y)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+
     # Flip the cat ears image if facing right
     if right_x > left_x:
         flipped_cat_ears_img = cv2.flip(cat_ears_img, 1)  # Horizontal flip
     else:
         flipped_cat_ears_img = cat_ears_img
-    
+
     # Resize and rotate the cat ears
     resized_cat_ears = cv2.resize(flipped_cat_ears_img, (ear_width, ear_height))
     M = cv2.getRotationMatrix2D((ear_width // 2, ear_height // 2), angle, 1.0)
     rotated_cat_ears = cv2.warpAffine(resized_cat_ears, M, (ear_width, ear_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
-    
-    # Overlay cat ears
-    for c in range(3):
-        frame[top_left_y:top_left_y + ear_height, top_left_x:top_left_x + ear_width, c] = (
-            rotated_cat_ears[:ear_height, :ear_width, c] * (rotated_cat_ears[:ear_height, :ear_width, 3] / 255.0) +
-            frame[top_left_y:top_left_y + ear_height, top_left_x:top_left_x + ear_width, c] * (1.0 - rotated_cat_ears[:ear_height, :ear_width, 3] / 255.0)
-        )
-    
 
+    # Crop the rotated image to fit the valid region
+    cropped_cat_ears = rotated_cat_ears[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+
+    # Overlay cropped cat ears onto the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            cropped_cat_ears[:, :, c] * (cropped_cat_ears[:, :, 3] / 255.0) +
+            frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] * (1.0 - cropped_cat_ears[:, :, 3] / 255.0)
+        )
+
+    
 def overlay_cat_mask(frame, landmarks, nose_idx, chin_idx):
     h, w, _ = frame.shape
     # Get the nose and chin landmarks
     nose = landmarks[nose_idx]
     chin = landmarks[chin_idx]
-    
+
     # Calculate the position of the nose and chin
     nose_x, nose_y = int(nose.x * w), int(nose.y * h)
     chin_x, chin_y = int(chin.x * w), int(chin.y * h)
-    
+
     # Calculate the center position and angle for the mask
     center_x, center_y = (nose_x + chin_x) // 2, (nose_y + chin_y) // 2
     angle = -math.degrees(math.atan2(chin_y - nose_y, chin_x - nose_x)) + 90
-    
+
     # Calculate the mask dimensions based on the distance from the nose to the chin
     mask_width = int(np.linalg.norm([chin_x - nose_x, chin_y - nose_y]) * 1.6)
     mask_height = int(mask_width * cat_mask_img.shape[0] / cat_mask_img.shape[1])
-    
+
     # Resize the cat mask image to match the calculated dimensions
     resized_cat_mask = cv2.resize(cat_mask_img, (mask_width, mask_height))
-    
+
     # Check the direction of the head and flip the mask if facing right
     if chin_x > nose_x:
         resized_cat_mask = cv2.flip(resized_cat_mask, 1)  # Flip horizontally
-    
+
     # Rotate the cat mask image to match the angle of the line between the nose and chin
     M = cv2.getRotationMatrix2D((mask_width // 2, mask_height // 2), angle, 1.0)
     rotated_cat_mask = cv2.warpAffine(resized_cat_mask, M, (mask_width, mask_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
-    
-    # Calculate where to place the mask, aligning it from the nose to the chin area
-    top_left_x = max(center_x - mask_width // 2, 0)
-    top_left_y = max(center_y - mask_height // 2, 0)
-    
-    # Ensure the mask stays within the frame boundaries
-    overlay_width = min(mask_width, w - top_left_x)
-    overlay_height = min(mask_height, h - top_left_y)
-    
-    # Resize the rotated mask to fit within the frame
-    rotated_cat_mask = cv2.resize(rotated_cat_mask, (overlay_width, overlay_height))
-    
-    # Overlay the cat mask onto the frame
-    for c in range(3):
-        frame[top_left_y:top_left_y + overlay_height, top_left_x:top_left_x + overlay_width, c] = (
-            rotated_cat_mask[:overlay_height, :overlay_width, c] * (rotated_cat_mask[:overlay_height, :overlay_width, 3] / 255.0) +
-            frame[top_left_y:top_left_y + overlay_height, top_left_x:top_left_x + overlay_width, c] * (1.0 - rotated_cat_mask[:overlay_height, :overlay_width, 3] / 255.0)
+
+    # Calculate where to place the mask
+    top_left_x = center_x - mask_width // 2
+    top_left_y = center_y - mask_height // 2
+
+    # Compute overlay cropping boundaries
+    overlay_start_x = max(0, -top_left_x)
+    overlay_start_y = max(0, -top_left_y)
+    overlay_end_x = min(mask_width, w - top_left_x)
+    overlay_end_y = min(mask_height, h - top_left_y)
+
+    # Ensure valid overlay dimensions
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # Skip overlay if it goes out of bounds
+
+    # Adjust frame boundaries
+    frame_start_x = max(0, top_left_x)
+    frame_start_y = max(0, top_left_y)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+
+    # Crop the rotated mask to fit the valid region
+    cropped_cat_mask = rotated_cat_mask[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+
+    # Overlay the cropped cat mask onto the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            cropped_cat_mask[:, :, c] * (cropped_cat_mask[:, :, 3] / 255.0) +
+            frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] * (1.0 - cropped_cat_mask[:, :, 3] / 255.0)
         )
+
 
 # filter no 2
 dog_ears_img = cv2.imread('static/image/DogEar.png', cv2.IMREAD_UNCHANGED)
@@ -161,35 +190,52 @@ def overlay_dog_ears(frame, landmarks, left_ear_idx, right_ear_idx):
     ear_width = int(np.linalg.norm([right_x - left_x, right_y - left_y]) * 1.4)
     ear_height = int(ear_width * dog_ears_img.shape[0] / dog_ears_img.shape[1])
     
-    # Check if overlay dimensions fit within frame boundaries
+    # Initial placement for overlay
     top_left_x = center_x - ear_width // 2
     top_left_y = center_y - ear_height - 30  # Adjust position above the head
     
-    # If overlay is outside the frame bounds, skip overlaying
-    if top_left_x < 0 or top_left_y < 0 or (top_left_x + ear_width) > w or (top_left_y + ear_height) > h:
-        return  # Skip overlay if it goes out of bounds
+    # Calculate cropping bounds for overlay
+    overlay_start_x = max(0, -top_left_x)
+    overlay_start_y = max(0, -top_left_y)
+    overlay_end_x = min(ear_width, w - top_left_x)
+    overlay_end_y = min(ear_height, h - top_left_y)
     
-    # Flip the cat ears image if facing right
+    # Skip overlay if the overlay is completely out of bounds
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # No valid area to overlay
+    
+    # Adjust frame bounds for the overlay
+    frame_start_x = max(0, top_left_x)
+    frame_start_y = max(0, top_left_y)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+    
+    # Flip the dog ears image if facing right
     if right_x > left_x:
         flipped_dog_ears_img = cv2.flip(dog_ears_img, 1)  # Horizontal flip
     else:
         flipped_dog_ears_img = dog_ears_img
     
-    # Resize and rotate the  ears
+    # Resize and rotate the dog ears
     resized_dog_ears = cv2.resize(flipped_dog_ears_img, (ear_width, ear_height))
     M = cv2.getRotationMatrix2D((ear_width // 2, ear_height // 2), angle, 1.0)
     rotated_dog_ears = cv2.warpAffine(resized_dog_ears, M, (ear_width, ear_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
     
-    # Overlay cat ears
-    for c in range(3):
-        frame[top_left_y:top_left_y + ear_height, top_left_x:top_left_x + ear_width, c] = (
-            rotated_dog_ears[:ear_height, :ear_width, c] * (rotated_dog_ears[:ear_height, :ear_width, 3] / 255.0) +
-            frame[top_left_y:top_left_y + ear_height, top_left_x:top_left_x + ear_width, c] * (1.0 - rotated_dog_ears[:ear_height, :ear_width, 3] / 255.0)
+    # Crop the rotated dog ears to fit the valid overlay area
+    cropped_dog_ears = rotated_dog_ears[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+    
+    # Overlay the cropped dog ears onto the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            cropped_dog_ears[:, :, c] * (cropped_dog_ears[:, :, 3] / 255.0) +
+            frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] * (1.0 - cropped_dog_ears[:, :, 3] / 255.0)
         )
+
     
 
 def overlay_dog_mask(frame, landmarks, nose_idx, chin_idx):
     h, w, _ = frame.shape
+    
     # Get the nose and chin landmarks
     nose = landmarks[nose_idx]
     chin = landmarks[chin_idx]
@@ -206,34 +252,47 @@ def overlay_dog_mask(frame, landmarks, nose_idx, chin_idx):
     mask_width = int(np.linalg.norm([chin_x - nose_x, chin_y - nose_y]) * 1.6)
     mask_height = int(mask_width * dog_mask_img.shape[0] / dog_mask_img.shape[1])
     
-    # Resize the cat mask image to match the calculated dimensions
+    # Resize the mask to match the calculated dimensions
     resized_dog_mask = cv2.resize(dog_mask_img, (mask_width, mask_height))
     
-    # Check the direction of the head and flip the mask if facing right
+    # Check the direction of the head and flip the mask if necessary
     if chin_x > nose_x:
         resized_dog_mask = cv2.flip(resized_dog_mask, 1)  # Flip horizontally
     
-    # Rotate the cat mask image to match the angle of the line between the nose and chin
+    # Rotate the mask to match the angle of the line between the nose and chin
     M = cv2.getRotationMatrix2D((mask_width // 2, mask_height // 2), angle, 1.0)
     rotated_dog_mask = cv2.warpAffine(resized_dog_mask, M, (mask_width, mask_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
     
-    # Calculate where to place the mask, aligning it from the nose to the chin area
-    top_left_x = max(center_x - mask_width // 2, 0)
-    top_left_y = max(center_y - mask_height // 2, 0)
+    # Calculate the top-left position for placing the mask
+    top_left_x = center_x - mask_width // 2
+    top_left_y = center_y - mask_height // 2
     
-    # Ensure the mask stays within the frame boundaries
-    overlay_width = min(mask_width, w - top_left_x)
-    overlay_height = min(mask_height, h - top_left_y)
+    # Calculate cropping bounds for the overlay
+    overlay_start_x = max(0, -top_left_x)
+    overlay_start_y = max(0, -top_left_y)
+    overlay_end_x = min(mask_width, w - top_left_x)
+    overlay_end_y = min(mask_height, h - top_left_y)
     
-    # Resize the rotated mask to fit within the frame
-    rotated_cat_mask = cv2.resize(rotated_dog_mask, (overlay_width, overlay_height))
+    # Skip overlaying if the mask is completely out of bounds
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # No valid area to overlay
     
-    # Overlay the cat mask onto the frame
-    for c in range(3):
-        frame[top_left_y:top_left_y + overlay_height, top_left_x:top_left_x + overlay_width, c] = (
-            rotated_cat_mask[:overlay_height, :overlay_width, c] * (rotated_cat_mask[:overlay_height, :overlay_width, 3] / 255.0) +
-            frame[top_left_y:top_left_y + overlay_height, top_left_x:top_left_x + overlay_width, c] * (1.0 - rotated_cat_mask[:overlay_height, :overlay_width, 3] / 255.0)
+    # Adjust the frame bounds for the overlay
+    frame_start_x = max(0, top_left_x)
+    frame_start_y = max(0, top_left_y)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+    
+    # Crop the rotated mask to fit the valid overlay area
+    cropped_mask = rotated_dog_mask[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+    
+    # Overlay the cropped mask onto the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            cropped_mask[:, :, c] * (cropped_mask[:, :, 3] / 255.0) +
+            frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] * (1.0 - cropped_mask[:, :, 3] / 255.0)
         )
+
 
 # filter no 3
 glasses_img = cv2.imread('static/image/Glasses.png', cv2.IMREAD_UNCHANGED)
@@ -269,20 +328,36 @@ def overlay_glasses(frame, landmarks, left_eye_idx, right_eye_idx):
     x1 = int(eye_center[0] - glasses_width // 2)
     x2 = x1 + glasses_width
 
-    # Ensure the coordinates are within the frame boundaries
-    if x1 < 0 or y1 < 0 or x2 > frame.shape[1] or y2 > frame.shape[0]:
-        return  # Do not overlay if out of bounds
+    # Calculate cropping bounds for the overlay
+    overlay_start_x = max(0, -x1)
+    overlay_start_y = max(0, -y1)
+    overlay_end_x = min(glasses_width, frame.shape[1] - x1)
+    overlay_end_y = min(glasses_height, frame.shape[0] - y1)
 
-    # Extract the alpha channel from the rotated glasses image
-    alpha_glasses = rotated_glasses[:, :, 3] / 255.0
+    # Skip overlaying if the overlay is completely out of bounds
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # No valid area to overlay
+
+    # Adjust the frame bounds for the overlay
+    frame_start_x = max(0, x1)
+    frame_start_y = max(0, y1)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+
+    # Crop the rotated glasses image to fit the valid overlay area
+    cropped_glasses = rotated_glasses[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+
+    # Extract the alpha channel from the cropped glasses image
+    alpha_glasses = cropped_glasses[:, :, 3] / 255.0
     alpha_frame = 1.0 - alpha_glasses
 
-    # Overlay the rotated glasses image on the frame
-    for c in range(0, 3):
-        frame[y1:y2, x1:x2, c] = (
-            alpha_glasses * rotated_glasses[:, :, c] +
-            alpha_frame * frame[y1:y2, x1:x2, c]
+    # Overlay the cropped glasses image on the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            alpha_glasses * cropped_glasses[:, :, c] +
+            alpha_frame * frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c]
         )
+
 
 def overlay_mustache(frame, landmarks, left_mouth_idx, right_mouth_idx, upper_lip_idx):
     # Get the coordinates of the left and right corners of the mouth and the upper lip
@@ -291,9 +366,9 @@ def overlay_mustache(frame, landmarks, left_mouth_idx, right_mouth_idx, upper_li
     upper_lip = (int(landmarks[upper_lip_idx].x * frame.shape[1]), int(landmarks[upper_lip_idx].y * frame.shape[0]))
 
     # Calculate the center point of the mustache overlay
-    mustache_center = ((left_mouth[0] + right_mouth[0]) // 2, upper_lip[1] - 15 )
+    mustache_center = ((left_mouth[0] + right_mouth[0]) // 2, upper_lip[1] - 15)
 
-
+    # Calculate the angle between the mouth corners in degrees
     angle = -np.degrees(np.arctan2(right_mouth[1] - left_mouth[1], right_mouth[0] - left_mouth[0]))
 
     # Calculate the width and height of the mustache based on the distance between the mouth corners
@@ -301,10 +376,9 @@ def overlay_mustache(frame, landmarks, left_mouth_idx, right_mouth_idx, upper_li
     mustache_height = int(mustache_img.shape[0] * (mustache_width / mustache_img.shape[1]))
     resized_mustache = cv2.resize(mustache_img, (mustache_width, mustache_height), interpolation=cv2.INTER_AREA)
 
-    # Rotate the glasses image by the calculated angle
+    # Rotate the mustache image by the calculated angle
     M = cv2.getRotationMatrix2D((mustache_width // 2, mustache_height // 2), angle, 1)
-    rotated_glasses = cv2.warpAffine(resized_mustache, M, (mustache_width, mustache_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
-
+    rotated_mustache = cv2.warpAffine(resized_mustache, M, (mustache_width, mustache_height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
 
     # Determine the region where the mustache will be overlaid
     y1 = int(mustache_center[1] - mustache_height // 2)
@@ -312,19 +386,34 @@ def overlay_mustache(frame, landmarks, left_mouth_idx, right_mouth_idx, upper_li
     x1 = int(mustache_center[0] - mustache_width // 2)
     x2 = x1 + mustache_width
 
-    # Ensure the coordinates are within the frame boundaries
-    if x1 < 0 or y1 < 0 or x2 > frame.shape[1] or y2 > frame.shape[0]:
-        return  # Do not overlay if out of bounds
+    # Calculate cropping bounds for the overlay
+    overlay_start_x = max(0, -x1)
+    overlay_start_y = max(0, -y1)
+    overlay_end_x = min(mustache_width, frame.shape[1] - x1)
+    overlay_end_y = min(mustache_height, frame.shape[0] - y1)
 
-    # Extract the alpha channel from the resized mustache image (assuming it's an RGBA image)
-    alpha_mustache = rotated_glasses[:, :, 3] / 255.0
+    # Skip overlaying if the overlay is completely out of bounds
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # No valid area to overlay
+
+    # Adjust the frame bounds for the overlay
+    frame_start_x = max(0, x1)
+    frame_start_y = max(0, y1)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+
+    # Crop the rotated mustache image to fit the valid overlay area
+    cropped_mustache = rotated_mustache[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+
+    # Extract the alpha channel from the cropped mustache image (assuming it's an RGBA image)
+    alpha_mustache = cropped_mustache[:, :, 3] / 255.0
     alpha_frame = 1.0 - alpha_mustache
 
-    # Overlay the mustache image on the frame
-    for c in range(0, 3):
-        frame[y1:y2, x1:x2, c] = (
-            alpha_mustache * rotated_glasses[:, :, c] +
-            alpha_frame * frame[y1:y2, x1:x2, c]
+    # Overlay the cropped mustache image on the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            alpha_mustache * cropped_mustache[:, :, c] +
+            alpha_frame * frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c]
         )
 
 def overlay_cowboy_hat(frame, landmarks, upper_head_idx):
@@ -340,7 +429,7 @@ def overlay_cowboy_hat(frame, landmarks, upper_head_idx):
     resized_hat = cv2.resize(cowboy_hat_img, (int(hat_width), hat_height), interpolation=cv2.INTER_AREA)
 
     # Position the hat above the head landmark (a little above the upper head)
-    hat_center = (upper_head[0], upper_head[1] - int(hat_height * 0.4))  
+    hat_center = (upper_head[0], upper_head[1] - int(hat_height * 0.4))
 
     # Determine the region where the cowboy hat will be overlaid
     y1 = int(hat_center[1] - hat_height // 2)
@@ -348,67 +437,117 @@ def overlay_cowboy_hat(frame, landmarks, upper_head_idx):
     x1 = int(hat_center[0] - hat_width // 2)
     x2 = int(x1 + hat_width)  # Ensure x2 is also an integer
 
-    # Ensure the coordinates are within the frame boundaries
-    if x1 < 0 or y1 < 0 or x2 > frame.shape[1] or y2 > frame.shape[0]:
-        return  # Do not overlay if out of bounds
+    # Calculate cropping bounds for the overlay
+    overlay_start_x = max(0, -x1)
+    overlay_start_y = max(0, -y1)
+    overlay_end_x = min(hat_width, frame.shape[1] - x1)
+    overlay_end_y = min(hat_height, frame.shape[0] - y1)
 
-    # Extract the alpha channel from the resized cowboy hat image (assuming it's an RGBA image)
-    alpha_hat = resized_hat[:, :, 3] / 255.0
+    # Skip overlaying if the overlay is completely out of bounds
+    if overlay_end_x <= overlay_start_x or overlay_end_y <= overlay_start_y:
+        return  # No valid area to overlay
+
+    # Adjust the frame bounds for the overlay
+    frame_start_x = max(0, x1)
+    frame_start_y = max(0, y1)
+    frame_end_x = frame_start_x + (overlay_end_x - overlay_start_x)
+    frame_end_y = frame_start_y + (overlay_end_y - overlay_start_y)
+
+    # Crop the resized cowboy hat image to fit the valid overlay area
+    cropped_hat = resized_hat[overlay_start_y:overlay_end_y, overlay_start_x:overlay_end_x]
+
+    # Extract the alpha channel from the cropped cowboy hat image (assuming it's an RGBA image)
+    alpha_hat = cropped_hat[:, :, 3] / 255.0
     alpha_frame = 1.0 - alpha_hat
 
-    # Overlay the cowboy hat image on the frame
-    for c in range(0, 3):
-        frame[y1:y2, x1:x2, c] = (
-            alpha_hat * resized_hat[:, :, c] +
-            alpha_frame * frame[y1:y2, x1:x2, c]
+    # Overlay the cropped cowboy hat image on the frame
+    for c in range(3):  # Loop over color channels
+        frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c] = (
+            alpha_hat * cropped_hat[:, :, c] +
+            alpha_frame * frame[frame_start_y:frame_end_y, frame_start_x:frame_end_x, c]
         )
+
 choice = 0
-def generate_filter_face_frames():
-    global choice
+frame_rate = 30  # Target frame rate (fps)
+last_time = time.time()
+
+def generate_filter_face_frames(width, height):
+    global choice, last_time, frame_rate, overlay_frame
     while True:
         ret, frame = camera.read()
         if not ret:
             break
-        frame = cv2.resize(frame, (640, 480))
+
+        frame = cv2.flip(frame,1)
+        
+        # Control the frame rate (process every Nth frame)
+        if time.time() - last_time < 1 / frame_rate:
+            continue
+        last_time = time.time()
+
+        # Resize only after processing
+        overlay_frame = frame.copy()
+
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = face_mesh.process(rgb_frame)
 
         # Proses deteksi wajah
         if results.multi_face_landmarks:
-            overlay_frame = frame.copy()
-
             # Loop untuk setiap wajah yang terdeteksi
             for face_landmarks in results.multi_face_landmarks:
-                # mp_drawing.draw_landmarks(overlay_frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS)
                 landmarks = face_landmarks.landmark
 
                 # Terapkan filter sesuai pilihan
                 if choice == 0:
                     pass
                 elif choice == 1:
-                    overlay_cat_ears(overlay_frame, landmarks, 454, 234)  
-                    overlay_cat_mask(overlay_frame, landmarks, 5, 152)   
+                    overlay_cat_ears(overlay_frame, landmarks, 454, 234)
+                    overlay_cat_mask(overlay_frame, landmarks, 5, 152)
                 elif choice == 2:
-                    overlay_dog_ears(overlay_frame, landmarks, 454, 234)  
-                    overlay_dog_mask(overlay_frame, landmarks, 5, 152)  
+                    overlay_dog_ears(overlay_frame, landmarks, 454, 234)
+                    overlay_dog_mask(overlay_frame, landmarks, 5, 152)
                 elif choice == 3:
                     overlay_glasses(overlay_frame, landmarks, 33, 263)
                     overlay_mustache(overlay_frame, landmarks, 61, 291, 11)
                     overlay_cowboy_hat(overlay_frame, landmarks, 10)
 
-        _, buffer = cv2.imencode('.jpg', overlay_frame)
+        # Resize the final frame before sending it to the frontend
+        resized_frame = cv2.resize(overlay_frame, (width, height))
+        
+        # Encode and yield the frame
+        _, buffer = cv2.imencode('.jpg', resized_frame)
         frame = buffer.tobytes()
         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 @app.route('/filter_face_feed')
 def filter_face_feed():
-    return Response(generate_filter_face_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    width = int(request.args.get('width', 640))  # Default width is 640
+    height = int(request.args.get('height', 480))  # Default height is 480
+    
+    # Generate the filter face frames with the given width and height
+    return Response(generate_filter_face_frames(width, height), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route("/filterdetail/<int:id>")
 def filterdetailpage(id):
     global choice
     choice =int(id)
-    return render_template('FilterDetailPage.html', filter_id=id)
+    return redirect(url_for("filterpage"))
+
+
+@app.route('/save_image')
+def save_image():
+    success, buffer = cv2.imencode('.png', overlay_frame)
+    if not success:
+        return "Image encoding error", 500
+
+    return Response(
+        buffer.tobytes(),
+        mimetype='image/png',  
+        headers={
+            'Content-Disposition': 'attachment; filename="captured_image.png"'  
+        }
+    )
+
 
 # game
 # Initialize MediaPipe Hands and Drawing modules
@@ -429,7 +568,10 @@ splashes = []
 
 slash_points = []
 slash_color = (255, 255, 255)
-slash_length = 2
+slash_length = 5
+
+
+fruit_ninja_font_style = 'static/fontstyle/FruitNinjaFontStyle.ttf'
 
 # Load images (ensure paths are correct)
 watermelon_img = cv2.imread('static/image/watermelon.png', cv2.IMREAD_UNCHANGED)
@@ -521,7 +663,7 @@ global out_off_game
 out_off_game = False
 def game_generate_frame():
     """Generate a frame to stream to the browser"""
-    global game_started, game_over, can_piece, score, game_timer, last_spawn_time, objects, splashes, slash_color, slash_points, slash_length, remaining_time, bomb_hit_time, time_out, out_off_game, wait_metal_cd , can_metal
+    global game_started, game_over, can_piece, score, game_timer, last_spawn_time, objects, splashes, slash_color, slash_points, slash_length, remaining_time, bomb_hit_time, time_out, out_off_game, wait_metal_cd , can_metal, fruit_ninja_font_style
     out_off_game = False
     # cap = cv2.VideoCapture(0)
     game_over = False
@@ -529,6 +671,10 @@ def game_generate_frame():
     can_metal = True
     play_over_sound = True
     
+
+  
+
+
     print(image_width, image_height)
 
     while camera.isOpened() and out_off_game == False:
@@ -610,6 +756,7 @@ def game_generate_frame():
                     for i in range(1, len(slash_points)):
                         cv2.line(output_frame, slash_points[i - 1], slash_points[i], slash_color, 3)
 
+                    cv2.circle(output_frame, index_pos, 5, slash_color, -1)
                     for obj in objects[:]:
                         distance = math.sqrt((index_pos[0] - obj["x"])**2 + (index_pos[1] - obj["y"])**2)
                         if distance < obj["radius"]:
@@ -654,10 +801,10 @@ def game_generate_frame():
                 time_out = None
 
         current_time = time.time()
-        if current_time - last_spawn_time >= 1.5 and game_started:
+        if current_time - last_spawn_time >= 2 and game_started:
             last_spawn_time = current_time
-            for _ in range(random.randint(1, 4)):  
-                obj_type = "bomb" if random.random() <= 0.2 else random.choice(["watermelon", "pineapple", "banana", "apple"])
+            for _ in range(random.randint(1, 3)):  
+                obj_type = "bomb" if random.random() <= 0.1 else random.choice(["watermelon", "pineapple", "banana", "apple"])
                 if obj_type == "bomb":
                     pygame.mixer.music.load(throw_bomb_sound)
                     pygame.mixer.music.play()
@@ -818,15 +965,31 @@ def game_generate_frame():
                     score_logo[:, :, c] * alpha_score +
                     output_frame[y_score_img:y_score_end, x_score_img:x_score_end, c] * (1 - alpha_score)
                 )
-
+        pil_image = Image.fromarray(output_frame)
+        font = ImageFont.truetype(fruit_ninja_font_style, 40) 
+        draw = ImageDraw.Draw(pil_image)
         # Add numeric score next to the score image
         text_x = x_score_end + 10  # Position the text slightly to the right of the score image
-        text_y = y_score_img + score_img_h // 2 + 10  # Center the text vertically with the score image
-        cv2.putText(output_frame, str(score), (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+        text_y = y_score_img + score_img_h // 2 - 20  # Center the text vertically with the score image
+        draw.text((text_x,text_y), str(score), font=font, fill=(0, 255, 255))
+
+        # cv2.putText(output_frame, str(score), (text_x, text_y), fruit_ninja_font_style, 1, (0, 255, 255), 2)
         if game_started:
             remaining_time = max_game_duration - int(time.time() - game_timer)
-        cv2.putText(output_frame, f"Time: {remaining_time}s", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        
+        # cv2.putText(output_frame, f"Time: {remaining_time}s", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+        time_text = str(remaining_time)
+
+        # Get the bounding box of the text
+        bbox = draw.textbbox((0, 0), time_text, font=font)  # (left, top, right, bottom)
+        text_width = bbox[2] - bbox[0]  # width of the text
+
+        # Position the text on the right
+        text_x_time = w - text_width - 20  # Right-align the text with a margin of 20 pixels
+        text_y_time = 20  # Top margin
+        draw.text((text_x_time, text_y_time), time_text, font=font, fill=(255, 255, 255))
+
+        output_frame = np.array(pil_image)
         if game_over:
             # Get the dimensions of the overlay image
             overlay_height, overlay_width = game_over_img.shape[:2]
@@ -1111,7 +1274,7 @@ def sse_status():
         global redirection_triggered
         while not redirection_triggered:
             yield f"data: running\n\n"
-            time.sleep(1)  # Interval untuk mengirim status (1 detik)
+            time.sleep(1)  
         yield f"data: redirect\n\n"
 
     return Response(event_stream(), content_type='text/event-stream')

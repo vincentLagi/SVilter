@@ -1,19 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='FilterPageStyle.css')}}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='FilterPageStyle.css') }}">
     <title>Filter Page</title>
 </head>
-<body id="body">
-    <nav id="navbar">
-        <h1 id="navbar-logo" onclick="window.location.href='/home'">SVilter</h1>
-        <a id="navbar-signup" href="/profile">{{session['username']}}</a>
-    </nav>
 
-    <div id="main-container">
-        <img src="{{ url_for('filter_face_feed') }}" alt="Cat Ears Feed" width="100%" height="100%">
+<body>
+    <div id="gameContainer">
+        <!-- Passing the width and height directly to the image URL -->
+        <img src="{{ url_for('filter_face_feed', width=1928, height=640) }}" alt="Cat Ears Feed" id="gameImage">
+    </div>
+    <a href="/home" id="backButton"><img src="{{url_for('static', filename='image/close.png')}}" alt="Close"></a>
+
+    <!-- Camera button in the middle-right of the page -->
+    <div id="cameraButton">
+        <button onclick="window.location.href='/save_image'" ><img src="{{url_for('static', filename='image/cameraLogo.png')}}" alt=""></button>
+    </div>
+
+    <div id="filter_menu">
+        <div>
+            <button onclick="window.location.href='/filterdetail/10'"><img
+                    src="{{url_for('static', filename='image/faceLogo.png')}}" alt="Cat Logo"></button>
+        </div>
+
+        <div>
+            <button onclick="window.location.href='/filterdetail/1'"><img
+                    src="{{url_for('static', filename='image/catLogo.png')}}" alt="Cat Logo"></button>
+        </div>
+
+        <div>
+            <button onclick="window.location.href='/filterdetail/2'"><img
+                    src="{{url_for('static', filename='image/dogLogo.png')}}" alt="Dog Logo"></button>
+        </div>
+
+        <div>
+            <button onclick="window.location.href='/filterdetail/3'"><img
+                    src="{{url_for('static', filename='image/mustacheLogo.png')}}" alt="Mustache Logo"></button>
+        </div>
     </div>
 </body>
+
 </html>
