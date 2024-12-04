@@ -12,7 +12,77 @@
     <div id="main">
         <img src="{{ url_for('game_video_feed') }}" alt="Video Feed" id="gameImage">
     </div>
+    <!-- <video id="video" autoplay playsinline ></video>
+    <canvas id="canvas" ></canvas>
+    <img id="processedFrame" alt="Processed frame from backend"> -->
 </body>
+<!-- <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script> -->
+<!-- <script>
+    const videoElement = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const processedFrame = document.getElementById('processedFrame');
+    const ctx = canvas.getContext('2d');
+
+    
+    function resize() {
+            // Set the actual dimensions of the canvas and video
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            videoElement.width = window.innerWidth;
+            videoElement.height = window.innerHeight;
+
+            // Update the style dimensions for display purposes
+            videoElement.style.width = `${window.innerWidth}px`;
+            videoElement.style.height = `${window.innerHeight}px`;
+            canvas.style.width = `${window.innerWidth}px`;
+            canvas.style.height = `${window.innerHeight}px`;
+        }
+
+
+    resize()
+    console.log(window.innerWidth)
+    console.log(window.innerHeight)
+    const camera = new Camera(videoElement, {
+        onFrame: async () => {
+            sendFrameToBackend();
+        },
+        width: window.innerWidth,
+        height: window.innerHeight,
+    });
+    camera.start();
+
+    window.onresize = () => {
+        resize()
+    }
+
+    
+
+    async function sendFrameToBackend() {
+        
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        const frameData = canvas.toDataURL('image/jpeg');
+
+        try {
+            const response = await fetch('http://127.0.0.1:5000/process_game', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ frame: frameData }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                processedFrame.src = data.processed_frame;
+            } else {
+                console.error('Error from backend:', data.message);
+            }
+        } catch (error) {
+            console.error('Error sending frame to backend:', error);
+        }
+    }
+</script> -->
 <script>
     const sse = new EventSource('/sse_game_status');
 
@@ -29,16 +99,13 @@
             sse.close(); // Close SSE connection on error
         };
     
-        const imgElement = document.getElementById('gameImage');
-        const imgWidth = imgElement.width;   
-        const imgHeight = imgElement.height; 
 
-        fetch('/update_frame_size', {
-            method: 'POST',
-            body: JSON.stringify({ width: imgWidth, height: imgHeight }),
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        // fetch('/update_frame_size', {
+        //     method: 'POST',
+        //     body: JSON.stringify({ width: window.innerWidth, height: window.innerHeight }),
+        //     headers: {
+        //         'Content-Type': 'application/json'
+        //     }
+        // });
 </script>
 </html>

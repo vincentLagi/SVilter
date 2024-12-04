@@ -9,38 +9,97 @@
 </head>
 
 <body>
+
     <div id="gameContainer">
-        <!-- Passing the width and height directly to the image URL -->
-        <img src="{{ url_for('filter_face_feed', width=1928, height=640) }}" alt="Cat Ears Feed" id="gameImage">
+        <video id="cameraFeed" autoplay playsinline style="display: none;"></video>
+        <img id="processedFeed" alt="Processed Feed">
     </div>
+
     <a href="/home" id="backButton"><img src="{{url_for('static', filename='image/close.png')}}" alt="Close"></a>
 
     <!-- Camera button in the middle-right of the page -->
     <div id="cameraButton">
-        <button onclick="window.location.href='/save_image'" ><img src="{{url_for('static', filename='image/cameraLogo.png')}}" alt=""></button>
+        <button onclick="captureImage()"><img src="{{url_for('static', filename='image/cameraLogo.png')}}"
+                alt=""></button>
     </div>
 
     <div id="filter_menu">
         <div>
-            <button onclick="window.location.href='/filterdetail/10'"><img
-                    src="{{url_for('static', filename='image/faceLogo.png')}}" alt="Cat Logo"></button>
+            <button onclick="setChoice(0)"><img src="{{url_for('static', filename='image/faceLogo.png')}}"
+                    alt="Cat Logo"></button>
         </div>
 
         <div>
-            <button onclick="window.location.href='/filterdetail/1'"><img
-                    src="{{url_for('static', filename='image/catLogo.png')}}" alt="Cat Logo"></button>
+            <button onclick="setChoice(1)"><img src="{{url_for('static', filename='image/catLogo.png')}}"
+                    alt="Cat Logo"></button>
         </div>
 
         <div>
-            <button onclick="window.location.href='/filterdetail/2'"><img
-                    src="{{url_for('static', filename='image/dogLogo.png')}}" alt="Dog Logo"></button>
+            <button onclick="setChoice(2)"><img src="{{url_for('static', filename='image/dogLogo.png')}}"
+                    alt="Dog Logo"></button>
         </div>
 
         <div>
-            <button onclick="window.location.href='/filterdetail/3'"><img
-                    src="{{url_for('static', filename='image/mustacheLogo.png')}}" alt="Mustache Logo"></button>
+            <button onclick="setChoice(3)"><img src="{{url_for('static', filename='image/mustacheLogo.png')}}"
+                    alt="Mustache Logo"></button>
         </div>
     </div>
+
+    <script>
+        let choice = 0; // Default choice
+
+        function setChoice(newChoice) {
+            choice = newChoice; // Update choice based on user input
+        }
+        const video = document.getElementById('cameraFeed');
+        const processedFeed = document.getElementById('processedFeed');
+
+        // Access the camera
+        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+            video.srcObject = stream;
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            function sendFrameToServer() {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const frame = canvas.toDataURL('image/jpeg').split(',')[1]; // Extract base64
+
+                // Send the frame to the backend
+                fetch('/process_frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ frame, choice })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.frame) {
+                            processedFeed.src = 'data:image/jpeg;base64,' + data.frame;
+                        }
+                    })
+                    .catch(err => console.error(err));
+            }
+
+            setInterval(sendFrameToServer, 1000 / 30); // Send at 30 fps
+        });
+
+        function captureImage() {
+            // Create a link element to download the image
+            const link = document.createElement('a');
+            link.download = 'processed_feed.jpg'; // Set default filename
+
+            // Capture the image data URL from processedFeed
+            const imageDataUrl = processedFeed.src;
+
+            // Set the href to the image data URL
+            link.href = imageDataUrl;
+
+            // Trigger the download by simulating a click on the link
+            link.click();
+        }
+    </script>
 </body>
 
 </html>
