@@ -10,7 +10,7 @@
 
 <body id="body">
     <nav id="navbar">
-        <h1 id="navbar-logo" onclick="window.location.href='/home'">Filtert</h1>
+        <h1 id="navbar-logo" onclick="window.location.href='/home'">SVilter</h1>
         <a id="navbar-signup" href="/profile">{{session['username']}}</a>
     </nav>
 
@@ -26,8 +26,7 @@
                     <h1 id="main-text2">{{session['username']}}</h1>
                     <!-- <button id="main-reg-button"
                         onclick="window.location.href='/registerface/{{ session['id'] }}'">Register YourFace</button> -->
-                    <button id="main-reg-button"
-                        onclick=openModal()>Register
+                    <button id="main-reg-button" onclick=openModal()>Register
                         YourFace</button>
                     <button id="main-logout-button" onclick="window.location.href='/logout'">Log Out</button>
                 </div>
@@ -38,29 +37,102 @@
                         <p>Register Your Face</p>
                         <span class="close" onclick="closeModal()">&times;</span>
                     </div>
-                    <p class="modal-content-reg-p"></p>
                     <div class="modal-body">
                         <div class="image-container">
-                            <h2>Smile and place your face in the middle</h2>
                             <img src="{{ url_for('register_face_video_feed') }}" width="100%" height="400px"
                                 id="face_video_feed">
+                            <h2>Smile and place your face in the middle</h2>
+
+                            <!-- <div>
+                                <video id="cameraFeed" autoplay playsinline style="display: none;"></video>
+                                <img id="processedFeed" alt="Processed Feed" width="100%" height="400px">
+                            </div> -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
+    <div id="popup-modal-err" class="modal">
+        <div class="modal-content">
+            <p>No camera detected. Please ensure a camera is connected.</p>
+            <button id="close-popup-err" onclick="closeErrPopup()">Close</button>
+        </div>
+    </div>
 </body>
 <script>
+    // const takeVid = false
+    // const video = document.getElementById('cameraFeed');
+    // const processedFeed = document.getElementById('processedFeed');
+
+    // navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+    //     video.srcObject = stream;
+
+    //     const canvas = document.createElement('canvas');
+    //     const ctx = canvas.getContext('2d');
+
+    //     function sendFrameToServer() {
+    //         canvas.width = video.videoWidth;
+    //         canvas.height = video.videoHeight;
+    //         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    //         const frame = canvas.toDataURL('image/jpeg').split(',')[1]; // Extract base64
+
+
+    //         if(takeVid){
+
+    //             fetch('/process_register_face', {
+    //                 method: 'POST',
+    //                 headers: { 'Content-Type': 'application/json' },
+    //                 body: JSON.stringify({ frame })
+    //             })
+    //             .then(response => response.json())
+    //             .then(data => {
+    //                 if (data.success) {
+    //                     processedFeed.src = data.frame;
+    //                 } else {
+    //                     console.error('Backend error:', data.message);
+    //                 }
+    //             })
+    //             .catch(err => console.error('Fetch error:', err));
+
+    //         }
+    //     }
+
+    //     setInterval(sendFrameToServer, 1000 / 30); // Send at 30 fps
+    // });
+
+
     closeModal()
 
     function openModal() {
+        
         document.getElementById("imageModal").style.display = "flex";
+        fetch('/check_camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        }).then(response => response.json())
+            .then(data => {
+                console.log(data.camera_detected)
+                if (data.camera_detected) {
+                    fetch('/training/1', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    })
+                } else {
+                    closeModal()
+                    showErrPopup()
+                }
+            })
+            
+
     }
 
     function closeModal() {
         document.getElementById("imageModal").style.display = "none";
+        fetch('/training/0', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
     }
 
     window.onclick = function (event) {
@@ -68,6 +140,30 @@
         if (event.target === modal) {
             closeModal();
         }
+    };
+
+    function showErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'flex';
+    }
+    function closeErrPopup() {
+        document.getElementById('popup-modal-err').style.display = 'none';
+       
+    }
+    const sse = new EventSource('/sse_status');
+
+    sse.onmessage = function (event) {
+        console.log("Status:", event.data);
+        if (event.data === "redirect") {
+            sse.close();
+            window.location.href = "/login";
+        } else if (event.data === "cameraloss") {
+            window.location.href = "/profile";
+        }
+    };
+
+    sse.onerror = function () {
+        console.error("SSE connection failed");
+        sse.close();
     };
 </script>
 

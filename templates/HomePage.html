@@ -14,16 +14,75 @@
 
     <div id="main-container">
         <div id="main-content">
-            <div id="main-part-one" onclick="window.location.href='/filter'">
+            <div id="main-part-one" onclick="navToFilter()">
                 <img id="main-img" src="{{ url_for('static', filename='image/Filter.jpg')}}" alt="">
                 <h1 id="main-text">Filter</h1>
             </div>
 
-            <div id="main-part-two" onclick="window.location.href='/game'">
+            <div id="main-part-two" onclick="navToGame()">
                 <img id="main-img" src="{{ url_for('static', filename='image/Game.jpg')}}" alt="">
                 <h1 id="main-text">Game</h1>
             </div>
         </div>
     </div>
+
+    <div id="popup-modal-err" class="modal">
+        <div class="modal-content">
+            <p>No camera detected. Please ensure a camera is connected.</p>
+            <button id="close-popup-err" onclick="closeErrPopup()">Close</button>
+        </div>
+    </div>
+    <script>
+
+        function navToFilter(){
+            fetch('/check_camera', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })  
+                .then(response => response.json())
+                .then(data => {
+                    if (data.camera_detected) {
+                        window.location.href = '/filter';
+                    } else {
+                        showErrPopup()
+                    }
+                })
+                .catch(error => {
+                    console.error("Error checking camera:", error);
+                    alert("An error occurred while checking the camera.");
+                });
+        }
+
+        function navToGame(){
+             fetch('/check_camera', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.camera_detected) {
+                        window.location.href = '/game';
+                    } else {
+                        showErrPopup()
+                    }
+                })
+                .catch(error => {
+                    console.error("Error checking camera:", error);
+                    alert("An error occurred while checking the camera.");
+                });
+        }
+
+        function showErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'flex';
+        }
+
+        function closeErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'none';
+        
+        }
+
+        
+
+    </script>
 </body>
 </html>

@@ -25,7 +25,7 @@
                     <form action="" method="post"
                         style="width: 100%; height: 75%; display: flex;justify-content: center;align-items: center;flex-direction: column;margin: 0;">
 
-                        <h1 id="main-title">Login to Filtert</h1>
+                        <h1 id="main-title">Login to SVilter</h1>
 
                         <input id="main-username-input" type="text" name="username" placeholder="Insert Your Username">
 
@@ -68,47 +68,62 @@
                 <p >Login With Face</p>
                 <span class="close" onclick="closeModal()">&times;</span>
             </div>
-            <p class="modal-content-reg-p"></p>
             <div class="modal-body">
                 <div class="image-container">
-                    <h2 >Smile and place your face in the middle</h2>
                     <img src="{{ url_for('login_face_video_feed') }}" width="100%" height="400px" id="face_video_feed">
+                    <h2 >Smile and place your face in the middle</h2>
                 </div>
             </div>
         </div>
     </div>
 
+    <div id="popup-modal-err" class="modal">
+        <div class="modal-content">
+            <p>No camera detected. Please ensure a camera is connected.</p>
+            <button id="close-popup-err">Close</button>
+        </div>
+    </div>
+
+
     <div id="registration-status" data-success="{{ session.pop('registration_successful', 'false') }}"></div>
     <div id="error" data-success="{{ 'true' if get_flashed_messages() else 'false' }}"></div>
     <script>
         closeModal()
-        const sse = new EventSource('/sse_status');
-
-            sse.onmessage = function (event) {
-                console.log("Status:", event.data);
-                if (event.data === "redirect") {
-                    sse.close(); 
-                    window.location.href = "/login"; 
-                }
-            };
-
-            sse.onerror = function () {
-                console.error("SSE connection failed");
-                sse.close(); // Close SSE connection on error
-            };
-
-
-         
-
-        
 
 
         function openModal() {
             document.getElementById("imageModal").style.display = "flex";
-        }
+            fetch('/check_camera', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.camera_detected) {
+                        fetch('/takeVid/1', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                    } else {
+                        closeModal()
+                        showErrPopup()
+                    }
+                })
+                .catch(error => {
+                    console.error("Error checking camera:", error);
+                    alert("An error occurred while checking the camera.");
+                });
+            }
+
 
         function closeModal() {
             document.getElementById("imageModal").style.display = "none";
+            // takeVid = false
+            fetch('/takeVid/0', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+
         }
 
         window.onclick = function (event) {
@@ -146,8 +161,41 @@
         if (closePopupButton) {
             closePopupButton.addEventListener('click', closePopup);
         }
-  
 
+        function showErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'flex';
+        }
+
+        function closeErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'none';
+            fetch('/takeVid/0', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+        }
+        
+        document.getElementById('close-popup-err').addEventListener('click', closeErrorPopup);
+
+            var closePopupButton = document.getElementById('close-popup-err');
+            if (closePopupButton) {
+                closePopupButton.addEventListener('click', closeErrPopup);
+            }
+        const sse = new EventSource('/sse_status');
+
+        sse.onmessage = function (event) {
+            console.log("Status:", event.data);
+            if (event.data === "redirect") {
+                sse.close();
+                window.location.href = "/login";
+            } else if(event.data === "cameraloss") {
+                window.location.href = "/login";
+            }
+        };
+
+        sse.onerror = function () {
+            console.error("SSE connection failed");
+            sse.close(); // Close SSE connection on error
+        };
     </script>
 </body>
 
