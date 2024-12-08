@@ -15,9 +15,15 @@
         <img id="processedFeed" alt="Processed Feed">
     </div> -->
     <div id="gameContainer">
-             <img src="{{ url_for('game_video_feed') }}" alt="Video Feed" id="gameImage">
+            <img src="{{ url_for('game_video_feed') }}" alt="Video Feed" id="gameImage">
     </div>
 
+    <div id="popup-modal-err" class="modal">
+        <div class="modal-content">
+            <p>No camera detected. Please ensure a camera is connected.</p>
+            <button id="close-popup-err" onclick="closeErrPopup()">Redirect To Home</button>
+        </div>
+    </div>
 </body>
 <!-- <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script> -->
 <!-- <script>
@@ -58,13 +64,44 @@
     });
 </script> -->
 <script>
+    checkCamera()
+
+    function checkCamera(){
+        fetch('/check_camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.camera_detected) {
+                    fetch('/takeVid/1', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } else {
+                    showErrPopup()
+                }
+            })
+            
+    }
+
+    function showErrPopup() {
+        document.getElementById('popup-modal-err').style.display = 'flex';
+    }
+
+    function closeErrPopup() {
+        document.getElementById('popup-modal-err').style.display = 'none';
+        window.location.href = '/home'
+    }
+
+
     const sse = new EventSource('/sse_game_status');
 
     sse.onmessage = function (event) {
         console.log("Status:", event.data);
         if (event.data === "redirect") {
             sse.close(); 
-            window.location.href = "/home"; 
+            showErrPopup()
         }
     };
 

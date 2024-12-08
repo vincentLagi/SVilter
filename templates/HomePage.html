@@ -35,41 +35,41 @@
     <script>
 
         function navToFilter(){
-            fetch('/check_camera', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            })  
-                .then(response => response.json())
-                .then(data => {
-                    if (data.camera_detected) {
+            // fetch('/check_camera', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' }
+            // })  
+            //     .then(response => response.json())
+            //     .then(data => {
+            //         if (data.camera_detected) {
                         window.location.href = '/filter';
-                    } else {
-                        showErrPopup()
-                    }
-                })
-                .catch(error => {
-                    console.error("Error checking camera:", error);
-                    alert("An error occurred while checking the camera.");
-                });
+                //     } else {
+                //         showErrPopup()
+                //     }
+                // })
+                // .catch(error => {
+                //     console.error("Error checking camera:", error);
+                //     alert("An error occurred while checking the camera.");
+                // });
         }
 
         function navToGame(){
-             fetch('/check_camera', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.camera_detected) {
+            //  fetch('/check_camera', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' }
+            // })
+            //     .then(response => response.json())
+            //     .then(data => {
+            //         if (data.camera_detected) {
                         window.location.href = '/game';
-                    } else {
-                        showErrPopup()
-                    }
-                })
-                .catch(error => {
-                    console.error("Error checking camera:", error);
-                    alert("An error occurred while checking the camera.");
-                });
+                //     } else {
+                //         showErrPopup()
+                //     }
+                // })
+                // .catch(error => {
+                //     console.error("Error checking camera:", error);
+                //     alert("An error occurred while checking the camera.");
+                // });
         }
 
         function showErrPopup() {

@@ -9,42 +9,38 @@
 </head>
 
 <body>
+    <!-- Video feed for camera -->
     <div id="gameContainer">
+        <video id="videoFeed" autoplay playsinline class="hidden"></video>
         <img src="{{ url_for('filter_face_feed', width=1928, height=640) }}" alt="Cat Ears Feed" id="gameImage">
     </div>
 
-    <!-- <div id="gameContainer">
-        <video id="cameraFeed" autoplay playsinline style="display: none;"></video>
-        <img id="processedFeed" alt="Processed Feed">
-    </div> -->
+    <!-- Back Button -->
+    <a href="/home" id="backButton"><img src="{{ url_for('static', filename='image/close.png') }}" alt="Close"></a>
 
-    <a href="/home" id="backButton"><img src="{{url_for('static', filename='image/close.png')}}" alt="Close"></a>
-
-    <!-- Camera button in the middle-right of the page -->
+    <!-- Camera Button -->
     <div id="cameraButton">
-        <button onclick="window.location.href='/save_image'"><img src="{{url_for('static', filename='image/cameraLogo.png')}}"
-                alt=""></button>
+        <button onclick="window.location.href='/save_image'"><img
+                src="{{ url_for('static', filename='image/cameraLogo.png') }}" alt=""></button>
     </div>
 
+    <!-- Filter Menu -->
     <div id="filter_menu">
         <div>
-            <button onclick="window.location.href='/filterdetail/0'"><img src="{{url_for('static', filename='image/faceLogo.png')}}"
-                    alt="Cat Logo"></button>
+            <button onclick="window.location.href='/filterdetail/0'"><img
+                    src="{{ url_for('static', filename='image/faceLogo.png') }}" alt="Face Logo"></button>
         </div>
-
         <div>
-            <button onclick="window.location.href='/filterdetail/1'"><img src="{{url_for('static', filename='image/catLogo.png')}}"
-                    alt="Cat Logo"></button>
+            <button onclick="window.location.href='/filterdetail/1'"><img
+                    src="{{ url_for('static', filename='image/catLogo.png') }}" alt="Cat Logo"></button>
         </div>
-
         <div>
-            <button onclick="window.location.href='/filterdetail/2'"><img src="{{url_for('static', filename='image/dogLogo.png')}}"
-                    alt="Dog Logo"></button>
+            <button onclick="window.location.href='/filterdetail/2'"><img
+                    src="{{ url_for('static', filename='image/dogLogo.png') }}" alt="Dog Logo"></button>
         </div>
-
         <div>
-            <button onclick="window.location.href='/filterdetail/3'"><img src="{{url_for('static', filename='image/mustacheLogo.png')}}"
-                    alt="Mustache Logo"></button>
+            <button onclick="window.location.href='/filterdetail/3'"><img
+                    src="{{ url_for('static', filename='image/mustacheLogo.png') }}" alt="Mustache Logo"></button>
         </div>
 
         <!-- <div>
@@ -52,8 +48,63 @@
                     alt="SS Logo"></button>
         </div> -->
     </div>
-
+    <div id="popup-modal-err" class="modal">
+        <div class="modal-content">
+            <p>No camera detected. Please ensure a camera is connected.</p>
+            <button id="close-popup-err" onclick="closeErrPopup()">Redirect To Home</button>
+        </div>
+    </div>
     <script>
+        function checkCamera() {
+
+            fetch('/check_camera', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.camera_detected) {
+                        fetch('/takeVid/1', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                    } else {
+                        showErrPopup()
+                    }
+                })
+                .catch(error => {
+                    console.error("Error checking camera:", error);
+                    alert("An error occurred while checking the camera.");
+                })
+                .finally(() => {
+                    toggleVisibility(false); 
+                });
+        }
+
+        checkCamera();
+
+        function showErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'flex';
+        }
+
+        function closeErrPopup() {
+            document.getElementById('popup-modal-err').style.display = 'none';
+            window.location.href = '/home'
+        }    
+        const sse = new EventSource('/sse_status');
+
+        sse.onmessage = function (event) {
+            console.log("Status:", event.data);
+            if (event.data === "cameraloss") {
+                showErrPopup()
+            }
+        };
+
+        sse.onerror = function () {
+            console.error("SSE connection failed");
+            sse.close();
+        };
+        
         // let choice = 0; // Default choice
 
         // function setChoice(newChoice) {

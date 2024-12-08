@@ -4,21 +4,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='FilterDetailPageStyle.css')}}">
-    <title>Filter Detail Page</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='GamePageStyle.css')}}">
+    <title>Fruit Ninja Game</title>
 </head>
 
-<body id="body">
-    <nav id="navbar">
-        <h1 id="navbar-logo" onclick="window.location.href='/home'">SVilter</h1>
-        <a id="navbar-signup" href="/profile">{{session['username']}}</a>
-    </nav>
-    <div id="main-container">
-        <div id="main-partone">
-            <img src="{{ url_for('filter_face_feed') }}" alt="Cat Ears Feed" width="100%" height="100%">
-        </div>
+<body>
+
+    <!-- <div id="gameContainer">
+        <video id="cameraFeed" autoplay playsinline style="display: none;"></video>
+        <img id="processedFeed" alt="Processed Feed">
+    </div> -->
+    <div id="gameContainer">
+        <img src="{{ url_for('game_video_feed') }}" alt="Video Feed" id="gameImage">
     </div>
 
 </body>
+<!-- <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script> -->
+<!-- <script>
+    const video = document.getElementById('cameraFeed');
+    const processedFeed = document.getElementById('processedFeed');
+
+    // Access the camera
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        video.srcObject = stream;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function sendFrameToServer() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = canvas.toDataURL('image/jpeg').split(',')[1]; 
+
+            fetch('/process_game', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        processedFeed.src = data.frame;
+                    } else {
+                        console.error('Backend error:', data.message);
+                    }
+                })
+                .catch(err => console.error('Fetch error:', err));
+
+        }
+
+        setInterval(sendFrameToServer, 1000 / 30); // Send at 30 fps
+    });
+</script> -->
+<script>
+    const sse = new EventSource('/sse_game_status');
+
+    sse.onmessage = function (event) {
+        console.log("Status:", event.data);
+        if (event.data === "redirect") {
+            sse.close();
+            window.location.href = "/home";
+        }
+    };
+
+    sse.onerror = function () {
+        console.error("SSE connection failed");
+        sse.close(); // Close SSE connection on error
+    };
+
+
+    // fetch('/update_frame_size', {
+    //     method: 'POST',
+    //     body: JSON.stringify({ width: window.innerWidth, height: window.innerHeight }),
+    //     headers: {
+    //         'Content-Type': 'application/json'
+    //     }
+    // });
+</script>
 
 </html>

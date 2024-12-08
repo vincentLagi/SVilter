@@ -153,10 +153,7 @@
 
     sse.onmessage = function (event) {
         console.log("Status:", event.data);
-        if (event.data === "redirect") {
-            sse.close();
-            window.location.href = "/login";
-        } else if (event.data === "cameraloss") {
+        if (event.data === "cameraloss") {
             window.location.href = "/profile";
         }
     };
